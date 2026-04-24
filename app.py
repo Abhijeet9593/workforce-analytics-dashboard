@@ -1,101 +1,47 @@
+import streamlit as st
+import pandas as pd
 import pickle
-import numpy as np
-from flask import Flask, request, render_template_string
 
-app = Flask(__name__)
+# Cache the model to keep the app fast
+@st.cache_resource
+def load_model():
+    with open('collabera_hr_model.pkl', 'rb') as file:
+        return pickle.load(file)
 
-# Load model
-model = pickle.load(open("collabera_hr_model.pkl", "rb"))
+model = load_model()
 
-# Simple HTML template (clean + modern)
-HTML_TEMPLATE = """
-<!DOCTYPE html>
-<html>
-<head>
-    <title>HR Prediction App</title>
-    <style>
-        body {
-            font-family: Arial, sans-serif;
-            background: linear-gradient(135deg, #667eea, #764ba2);
-            color: #fff;
-            text-align: center;
-            padding: 50px;
-        }
-        .container {
-            background: #ffffff;
-            color: #333;
-            padding: 30px;
-            border-radius: 12px;
-            width: 350px;
-            margin: auto;
-            box-shadow: 0 8px 20px rgba(0,0,0,0.2);
-        }
-        input {
-            width: 90%;
-            padding: 10px;
-            margin: 10px 0;
-            border-radius: 6px;
-            border: 1px solid #ccc;
-        }
-        button {
-            background: #667eea;
-            color: white;
-            padding: 10px 20px;
-            border: none;
-            border-radius: 6px;
-            cursor: pointer;
-        }
-        button:hover {
-            background: #5a67d8;
-        }
-        h1 {
-            margin-bottom: 20px;
-        }
-        .result {
-            margin-top: 20px;
-            font-size: 18px;
-            font-weight: bold;
-            color: #4CAF50;
-        }
-    </style>
-</head>
-<body>
-    <h1>💼 HR Prediction App</h1>
-    <div class="container">
-        <form method="POST" action="/predict">
-            <input type="number" step="any" name="feature1" placeholder="Feature 1" required>
-            <input type="number" step="any" name="feature2" placeholder="Feature 2" required>
-            <input type="number" step="any" name="feature3" placeholder="Feature 3" required>
-            <button type="submit">Predict</button>
-        </form>
-        {% if prediction %}
-            <div class="result">Prediction: {{ prediction }}</div>
-        {% endif %}
-    </div>
-</body>
-</html>
-"""
+st.set_page_config(page_title="Talent Retention AI", page_icon="🏢")
 
-@app.route("/")
-def home():
-    return render_template_string(HTML_TEMPLATE)
+st.title("🏢 Talent Retention & Attrition Predictor")
+st.write("An HR Analytics model tailored for workforce management and staffing companies.")
+st.markdown("---")
 
-@app.route("/predict", methods=["POST"])
-def predict():
-    try:
-        features = [
-            float(request.form["feature1"]),
-            float(request.form["feature2"]),
-            float(request.form["feature3"])
-        ]
+# Layout the input fields cleanly
+col1, col2 = st.columns(2)
 
-        final_features = np.array([features])
-        prediction = model.predict(final_features)[0]
+with col1:
+    age = st.number_input("Employee Age", min_value=18, max_value=65, value=30)
+    income = st.number_input("Monthly Income (USD)", min_value=1000, max_value=20000, value=5000)
+    satisfaction = st.slider("Job Satisfaction Rating", min_value=1, max_value=4, value=3, help="1=Low, 4=Very High")
 
-        return render_template_string(HTML_TEMPLATE, prediction=prediction)
+with col2:
+    years = st.number_input("Years at Company", min_value=0, max_value=40, value=3)
+    distance = st.number_input("Distance From Home (miles)", min_value=1, max_value=30, value=5)
+    overtime = st.selectbox("Works OverTime?", ["No", "Yes"])
 
-    except Exception as e:
-        return render_template_string(HTML_TEMPLATE, prediction=f"Error: {str(e)}")
+st.markdown("---")
 
-if __name__ == "__main__":
-    app.run(debug=True)
+if st.button("Predict Employee Attrition", type="primary"):
+    # Encode Overtime exactly how the model expects it
+    ot_encoded = 1 if overtime == "Yes" else 0
+    
+    # Create the DataFrame for prediction
+    input_data = pd.DataFrame([[age, income, satisfaction, years, ot_encoded, distance]], 
+                              columns=['Age', 'MonthlyIncome', 'JobSatisfaction', 'YearsAtCompany', 'OverTime', 'DistanceFromHome'])
+    
+    prediction = model.predict(input_data)
+    
+    if prediction[0] == 1:
+        st.error("⚠️ **High Risk of Flight!** This employee shows signs of leaving. Intervention is recommended.")
+    else:
+        st.success("✅ **Low Risk.** This employee is likely to be retained.")
